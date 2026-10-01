@@ -27,7 +27,7 @@
 const char* WIFI_SSID     = "LearningLinksFoundation";
 const char* WIFI_PASSWORD = "098765432";
 
-const char* AI_SERVER_URL = "https://foodscannercs.onrender.com/analyze"; // Replace with your actual Render URL
+const char* OPENAI_API_KEY = ""; // Put your OpenAI API Key here for AI explanations
 
 // ---------- PINS ------------------------------------------------------------
 #define PIN_MQ135      34     // ADC1_CH6  (analog gas sensor)
@@ -178,36 +178,54 @@ void finishScan() {
   lastVerdict = verdictOf(score);
   sysState = RESULT;
 
-  char buf[200];
-  snprintf(buf, sizeof(buf),
-    "{\"type\":\"scan_result\",\"temp\":%.1f,\"hum\":%.1f,\"gas\":%.0f,"
-    "\"score\":%d,\"verdict\":\"%s\"}",
-    t, h, g, score, lastVerdict.c_str());
-  ws.broadcastTXT(buf);
+  String explanation = "";
 
-  // Send to AI Server
-  if (strlen(AI_SERVER_URL) > 0 && strncmp(AI_SERVER_URL, "http", 4) == 0) {
+  // Send to OpenAI directly
+  if (strlen(OPENAI_API_KEY) > 0) {
     WiFiClientSecure *client = new WiFiClientSecure;
     if(client) {
       client->setInsecure(); // ignore SSL certificate validation for simplicity
       HTTPClient http;
-      if (http.begin(*client, AI_SERVER_URL)) {
+      if (http.begin(*client, "https://api.openai.com/v1/chat/completions")) {
         http.addHeader("Content-Type", "application/json");
-        char payload[150];
-        snprintf(payload, sizeof(payload), "{\"temp\":%.1f,\"hum\":%.1f,\"gas\":%.0f}", t, h, g);
+        http.addHeader("Authorization", String("Bearer ") + OPENAI_API_KEY);
+        
+        char payload[400];
+        snprintf(payload, sizeof(payload), 
+          "{\"model\":\"gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"You are a food-monitoring assistant. In 2 short sentences, explain to a home user what this sensor-based freshness estimate means and what to do. Data: temp=%.1fC, hum=%.1f%%, gas=%.0fppm, verdict=%s\"}],\"max_tokens\":120}",
+          t, h, g, lastVerdict.c_str());
+          
         int httpCode = http.POST(payload);
         if (httpCode > 0) {
-          Serial.printf("[AI Server] POST... code: %d\n", httpCode);
+          Serial.printf("[OpenAI] POST... code: %d\n", httpCode);
           String response = http.getString();
-          Serial.println(response);
+          // parse JSON string for content (simplified)
+          int contentIdx = response.indexOf("\"content\": \"");
+          if (contentIdx > 0) {
+            int startIdx = contentIdx + 12;
+            int endIdx = response.indexOf("\"},", startIdx);
+            if(endIdx == -1) endIdx = response.indexOf("\"}", startIdx);
+            if(endIdx > 0) {
+              explanation = response.substring(startIdx, endIdx);
+              explanation.replace("\\n", " ");
+              explanation.replace("\\\"", "'");
+            }
+          }
         } else {
-          Serial.printf("[AI Server] POST failed, error: %s\n", http.errorToString(httpCode).c_str());
+          Serial.printf("[OpenAI] POST failed, error: %s\n", http.errorToString(httpCode).c_str());
         }
         http.end();
       }
       delete client;
     }
   }
+
+  char buf[512];
+  snprintf(buf, sizeof(buf),
+    "{\"type\":\"scan_result\",\"temp\":%.1f,\"hum\":%.1f,\"gas\":%.0f,"
+    "\"score\":%d,\"verdict\":\"%s\",\"explanation\":\"%s\"}",
+    t, h, g, score, lastVerdict.c_str(), explanation.c_str());
+  ws.broadcastTXT(buf);
 
   ledForVerdict(lastVerdict.c_str());
   beep(120);
