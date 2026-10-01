@@ -25,7 +25,7 @@
 const char* WIFI_SSID     = "LearningLinksFoundation";
 const char* WIFI_PASSWORD = "098765432";
 
-const char* AI_SERVER_URL = "https://your-render-app.onrender.com/analyze"; // Replace with your actual Render URL
+const char* AI_SERVER_URL = "https://foodscannercs.onrender.com/analyze"; // Replace with your actual Render URL
 
 // ---------- PINS ------------------------------------------------------------
 #define PIN_MQ135      34     // ADC1_CH6  (analog gas sensor)
