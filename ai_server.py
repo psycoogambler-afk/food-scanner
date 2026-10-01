@@ -82,6 +82,10 @@ def llm_explain(payload, res):
         return None
 
 # ---------------- endpoints ----------------
+@app.get('/')
+def index():
+    return jsonify(message="Food Scanner AI Server is running!", endpoints=["/health", "/analyze"])
+
 @app.get('/health')
 def health():
     return jsonify(status='ok', ai='ready',
