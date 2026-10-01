@@ -1,0 +1,39 @@
+{
+  "project": "Smart Food Freshness Scanner - demo telemetry scenarios",
+  "note": "Simulated MQ-135 / DHT22 streams used by dashboard demo mode and tests. gas in PPM.",
+  "scenarios": [
+    {
+      "name": "FRESH - refrigerated milk",
+      "expected_verdict": "FRESH",
+      "readings": [
+        {"t": 0,  "temp": 4.1, "hum": 54, "gas": 405},
+        {"t": 5,  "temp": 4.0, "hum": 55, "gas": 410},
+        {"t": 10, "temp": 4.2, "hum": 55, "gas": 415},
+        {"t": 15, "temp": 4.1, "hum": 56, "gas": 420},
+        {"t": 20, "temp": 4.0, "hum": 55, "gas": 418}
+      ]
+    },
+    {
+      "name": "CHECK FOOD - room-temperature leftovers",
+      "expected_verdict": "CHECK FOOD",
+      "readings": [
+        {"t": 0,  "temp": 23.5, "hum": 60, "gas": 800},
+        {"t": 5,  "temp": 23.8, "hum": 61, "gas": 950},
+        {"t": 10, "temp": 24.0, "hum": 62, "gas": 1100},
+        {"t": 15, "temp": 24.2, "hum": 63, "gas": 1200},
+        {"t": 20, "temp": 24.1, "hum": 62, "gas": 1250}
+      ]
+    },
+    {
+      "name": "POSSIBLE SPOILAGE - old fish, humid",
+      "expected_verdict": "POSSIBLE SPOILAGE",
+      "readings": [
+        {"t": 0,  "temp": 26.0, "hum": 75, "gas": 1600},
+        {"t": 5,  "temp": 26.4, "hum": 78, "gas": 1900},
+        {"t": 10, "temp": 26.8, "hum": 80, "gas": 2150},
+        {"t": 15, "temp": 27.0, "hum": 82, "gas": 2300},
+        {"t": 20, "temp": 27.1, "hum": 83, "gas": 2400}
+      ]
+    }
+  ]
+}
