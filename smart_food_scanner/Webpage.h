@@ -1,0 +1,453 @@
+const char webpage_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Food Freshness Scanner — ESP32 + AI</title>
+<style>
+  :root{
+    --bg:#0a0f1e; --bg2:#0f1729; --card:#131c33; --card2:#18223a;
+    --accent:#22d3ee; --green:#22c55e; --amber:#f59e0b; --red:#ef4444;
+    --text:#e8eefb; --muted:#8ea3c8; --border:rgba(148,163,184,.14);
+    --radius:18px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;}
+  body{
+    background:radial-gradient(1200px 800px at 80% -10%,#13254d 0%,transparent 60%),
+               radial-gradient(900px 600px at -10% 110%,#0e2a2e 0%,transparent 55%),var(--bg);
+    color:var(--text); min-height:100vh;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 18px 60px;}
+
+  /* ---------- HEADER ---------- */
+  header{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;margin-bottom:22px;}
+  .brand{display:flex;align-items:center;gap:14px;}
+  .logo{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;font-size:26px;
+    background:linear-gradient(135deg,#164e63,#0e7490);box-shadow:0 0 24px rgba(34,211,238,.35);}
+  h1{font-size:clamp(18px,3vw,26px);letter-spacing:.5px;}
+  .subtitle{color:var(--muted);font-size:13px;margin-top:2px;}
+  .pills{display:flex;gap:10px;flex-wrap:wrap;}
+  .pill{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);
+    border-radius:999px;padding:8px 16px;font-size:13px;font-weight:600;}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--red);box-shadow:0 0 8px currentColor;}
+  .dot.on{background:var(--green);animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+
+  /* ---------- GRID ---------- */
+  .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;}
+  @media(max-width:900px){.grid{grid-template-columns:1fr;}}
+  .card{background:linear-gradient(180deg,var(--card),var(--bg2));border:1px solid var(--border);
+    border-radius:var(--radius);padding:22px;box-shadow:0 12px 32px rgba(0,0,0,.35);}
+
+  /* ---------- GAUGE ---------- */
+  .gauge-card{display:flex;flex-direction:column;align-items:center;text-align:center;}
+  .gauge-wrap{position:relative;width:280px;height:280px;margin:8px 0 4px;}
+  svg.gauge{width:100%;height:100%;transform:rotate(-90deg);}
+  .track{fill:none;stroke:rgba(148,163,184,.12);stroke-width:16;}
+  .progress{fill:none;stroke-width:16;stroke-linecap:round;transition:stroke-dashoffset 1.2s cubic-bezier(.22,1,.36,1),stroke .6s;}
+  .gauge-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+  .score{font-size:64px;font-weight:800;line-height:1;background:linear-gradient(180deg,#fff,#9fc3ff);-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .pct{font-size:20px;color:var(--muted);font-weight:600;}
+  .verdict{margin-top:6px;font-size:20px;font-weight:800;letter-spacing:2px;}
+  .verdict.fresh{color:var(--green);text-shadow:0 0 22px rgba(34,197,94,.6);}
+  .verdict.check{color:var(--amber);text-shadow:0 0 22px rgba(245,158,11,.6);}
+  .verdict.spoil{color:var(--red);text-shadow:0 0 22px rgba(239,68,68,.6);}
+  .basis{color:var(--muted);font-size:13px;margin:10px 0 18px;}
+
+  .scan-btn{
+    position:relative;border:none;cursor:pointer;border-radius:16px;padding:16px 42px;
+    font-size:17px;font-weight:800;letter-spacing:1px;color:#04101a;
+    background:linear-gradient(135deg,#22d3ee,#3b82f6);
+    box-shadow:0 10px 30px rgba(59,130,246,.4);transition:transform .15s,box-shadow .2s;
+  }
+  .scan-btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 14px 40px rgba(59,130,246,.55);}
+  .scan-btn:disabled{opacity:.75;cursor:wait;}
+
+  /* scanning radar overlay */
+  .radar{display:none;margin-top:20px;align-items:center;gap:14px;color:var(--muted);font-weight:600;}
+  .radar.active{display:flex;}
+  .radar-ring{width:44px;height:44px;border-radius:50%;border:3px solid rgba(34,211,238,.25);border-top-color:var(--accent);
+    animation:spin 1s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .count{font-size:22px;font-weight:800;color:var(--accent);min-width:34px;text-align:center;}
+
+  .tips{margin-top:16px;font-size:13.5px;color:var(--muted);background:rgba(34,211,238,.06);
+    border:1px solid rgba(34,211,238,.18);border-radius:12px;padding:12px 16px;max-width:420px;}
+  .tips b{color:var(--text);}
+
+  /* ---------- TELEMETRY ---------- */
+  .cards3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+  .t-card{background:rgba(148,163,184,.05);border:1px solid var(--border);border-radius:14px;padding:14px;}
+  .t-card .lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;}
+  .t-card .val{font-size:24px;font-weight:800;margin-top:4px;}
+  .t-card .unit{font-size:13px;color:var(--muted);font-weight:600;}
+  h3{font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin:18px 0 10px;}
+  canvas#chart{width:100%;height:170px;display:block;}
+  #log{height:170px;overflow-y:auto;font-size:12.5px;color:var(--muted);
+    background:rgba(0,0,0,.25);border:1px solid var(--border);border-radius:12px;padding:10px 12px;}
+  #log div{padding:3px 0;border-bottom:1px dashed rgba(148,163,184,.08);}
+  #log .t{color:#5b6c8f;margin-right:8px;}
+  .footer-note{margin-top:20px;text-align:center;color:#5b6c8f;font-size:11.5px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="logo">🥗</div>
+      <div>
+        <h1>SMART FOOD FRESHNESS SCANNER</h1>
+        <div class="subtitle">ESP32 + AI Food Monitoring System</div>
+      </div>
+    </div>
+    <div class="pills">
+      <div class="pill"><span class="dot" id="connDot"></span>ESP32 <span id="connTxt">OFFLINE</span></div>
+      <div class="pill"><span class="dot on" id="aiDot"></span>AI SYSTEM READY</div>
+    </div>
+  </header>
+
+  <div class="grid">
+
+    <!-- ================= MAIN GAUGE CARD ================= -->
+    <div class="card gauge-card">
+      <div class="gauge-wrap">
+        <svg class="gauge" viewBox="0 0 200 200">
+          <circle class="track" cx="100" cy="100" r="86"></circle>
+          <circle class="progress" id="prog" cx="100" cy="100" r="86"
+            stroke="#22c55e" stroke-dasharray="540.35" stroke-dashoffset="540.35"></circle>
+        </svg>
+        <div class="gauge-center">
+          <div><span class="score" id="score">--</span><span class="pct">%</span></div>
+          <div class="verdict fresh" id="verdict">READY</div>
+        </div>
+      </div>
+      <div class="basis">Based on current sensor and AI analysis</div>
+
+      <button class="scan-btn" id="scanBtn" onclick="startScan()">🔍 START FOOD SCAN</button>
+
+      <div class="radar" id="radar">
+        <div class="radar-ring"></div>
+        <span>Scanning Food...</span>
+        <span class="count" id="countdown">10</span>
+      </div>
+
+      <div class="tips" id="tips" style="display:none"></div>
+    </div>
+
+    <!-- ================= TELEMETRY ================= -->
+    <div class="card">
+      <div class="cards3">
+        <div class="t-card"><div class="lbl">Gas / VOC</div><div class="val" id="gasV">--<span class="unit"> ppm</span></div></div>
+        <div class="t-card"><div class="lbl">Temperature</div><div class="val" id="tempV">--<span class="unit"> °C</span></div></div>
+        <div class="t-card"><div class="lbl">Humidity</div><div class="val" id="humV">--<span class="unit"> %</span></div></div>
+      </div>
+
+      <h3>Live Gas Level</h3>
+      <canvas id="chart"></canvas>
+
+      <h3>Event Log</h3>
+      <div id="log"></div>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    Experimental educational prototype — estimates from low-cost sensors. Not a scientific food-safety certification.
+  </div>
+</div>
+
+<script>
+/* ============================================================================
+ *  SMART FOOD FRESHNESS SCANNER — AI analysis layer
+ *  Heuristic freshness engine. Runs in the browser (window.FoodAI) and in Node.
+ *
+ *  DISCLAIMER: experimental estimate from low-cost sensors. NOT a scientific
+ *  food-safety certification.
+ * ==========================================================================*/
+(function (global) {
+  'use strict';
+
+  var CONFIG = {
+    gasBaselinePPM: 400,     // clean-air baseline for MQ-135
+    gasSpoilPPM: 2500,       // level treated as strong spoilage indicator
+    tempIdealMin: 2,         // cold-chain storage
+    tempIdealMax: 10,
+    tempHardMax: 28,         // tropical ambient ceiling
+    humIdealMin: 40,
+    humIdealMax: 70,
+    weights: { gas: 45, temp: 25, hum: 15, color: 15 }
+  };
+
+  function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+  /* Smoothed analysis over the current reading (single-shot).
+     Pass a history array as 4th arg to smooth across readings. */
+  function analyze(temp, hum, gas, history) {
+    var t = Number(temp) || 0, h = Number(hum) || 0, g = Number(gas) || 0;
+
+    // --- penalties ------------------------------------------------------------
+    var gasRatio = clamp((g - CONFIG.gasBaselinePPM) /
+                         (CONFIG.gasSpoilPPM - CONFIG.gasBaselinePPM), 0, 1);
+    var gasPenalty = gasRatio * CONFIG.weights.gas;
+
+    var tempPenalty = 0;
+    if (t < CONFIG.tempIdealMin)      tempPenalty = (CONFIG.tempIdealMin - t) * 2.0;
+    else if (t > CONFIG.tempIdealMax) tempPenalty = (t - CONFIG.tempIdealMax) * 2.0;
+    tempPenalty = clamp(tempPenalty, 0, CONFIG.weights.temp);
+
+    var humPenalty = 0;
+    if (h < CONFIG.humIdealMin)      humPenalty = (CONFIG.humIdealMin - h) * 0.6;
+    else if (h > CONFIG.humIdealMax) humPenalty = (h - CONFIG.humIdealMax) * 0.6;
+    humPenalty = clamp(humPenalty, 0, CONFIG.weights.hum);
+
+    // --- score -----------------------------------------------------------------
+    var score = Math.round(clamp(100 - gasPenalty - tempPenalty - humPenalty, 0, 100));
+
+    // optional smoothing across history of scores
+    if (history && history.length) {
+      var avg = history.reduce(function (a, b) { return a + b; }, score) / (history.length + 1);
+      score = Math.round(avg);
+    }
+
+    var verdict = score >= 75 ? 'FRESH' : score >= 45 ? 'CHECK FOOD' : 'POSSIBLE SPOILAGE';
+
+    // --- confidence + tips ------------------------------------------------------
+    var confidence = Math.round(clamp(55 + gasRatio * 30 +
+      (gasPenalty + tempPenalty + humPenalty > 0 ? 10 : 0), 50, 97));
+
+    var tips = [];
+    if (verdict === 'FRESH') {
+      tips.push('Sensor values are within expected fresh-food ranges.');
+      if (t > 10) tips.push('Store refrigerated (2–10 °C) to maintain freshness.');
+    }
+    if (gasRatio > 0.15) tips.push('Elevated VOC/gas level — spoilage gases (amines/sulfur compounds) may be present.');
+    if (t > CONFIG.tempIdealMax) tips.push('Temperature above ideal storage range — bacterial growth risk increases.');
+    if (t < CONFIG.tempIdealMin) tips.push('Temperature near/below freezing — texture may be affected.');
+    if (h > CONFIG.humIdealMax) tips.push('High humidity — accelerates mold and spoilage.');
+    if (h < CONFIG.humIdealMin) tips.push('Very dry air — food may dehydrate and degrade faster.');
+    if (verdict === 'POSSIBLE SPOILAGE') {
+      tips.push('Strong spoilage indicators detected — inspect smell/appearance and discard if in doubt.');
+    } else if (verdict === 'CHECK FOOD') {
+      tips.push('One or more readings trending out of range — inspect the food manually before use.');
+    }
+    tips.push('Estimate only — verify with sight, smell and date labels.');
+
+    return { score: score, verdict: verdict, confidence: confidence,
+             penalties: { gas: Math.round(gasPenalty), temp: Math.round(tempPenalty), hum: Math.round(humPenalty) },
+             tips: tips };
+  }
+
+  var FoodAI = { analyze: analyze, config: CONFIG };
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = FoodAI;
+  else global.FoodAI = FoodAI;
+
+})(typeof window !== 'undefined' ? window : globalThis);
+
+/* ---- standalone demo (node ai/ai_analysis.js) ---- */
+if (typeof require !== 'undefined' && require.main === module) {
+  var samples = [
+    { name: 'fresh milk in fridge  ', temp: 4,  hum: 55, gas: 420  },
+    { name: 'room-temp leftovers   ', temp: 24, hum: 65, gas: 1150 },
+    { name: 'old fish (spoilage)   ', temp: 26, hum: 82, gas: 2300 }
+  ];
+  console.log('Smart Food Freshness Scanner — AI self-test\n');
+  samples.forEach(function (s) {
+    var r = require('./ai_analysis.js').analyze(s.temp, s.hum, s.gas);
+    var icon = r.verdict === 'FRESH' ? '🟢' : r.verdict === 'CHECK FOOD' ? '🟡' : '🔴';
+    console.log(icon + ' ' + s.name + ' -> ' + r.verdict + ' (' + r.score + '%) ' +
+                'conf:' + r.confidence + '%  penalties:' + JSON.stringify(r.penalties));
+  });
+}
+
+</script>
+<script>
+/* ================================================================
+   SMART FOOD FRESHNESS SCANNER — dashboard logic
+   - Connects to ESP32 via WebSocket (ws://IP:81), falls back to
+     DEMO MODE with simulated sensor stream when no hardware.
+   ================================================================ */
+var ESP32_URL = "";                 // e.g. "192.168.1.50" — blank = auto/detect
+var AI_SERVER_URL = "https://foodscannercs.onrender.com/analyze"; // Replace with your actual Render URL
+
+var ws = null, demo = true, history = [], scanning = false;
+
+/* ---------- gauge helpers ---------- */
+var CIRC = 2 * Math.PI * 86; // 540.35
+function setGauge(score, verdict){
+  var off = CIRC * (1 - score / 100);
+  var p = document.getElementById('prog');
+  p.style.strokeDashoffset = off;
+  p.setAttribute('stroke', verdict === 'FRESH' ? '#22c55e' : verdict === 'CHECK FOOD' ? '#f59e0b' : '#ef4444');
+  animateValue(document.getElementById('score'), score);
+  var v = document.getElementById('verdict');
+  v.textContent = verdict;
+  v.className = 'verdict ' + (verdict === 'FRESH' ? 'fresh' : verdict === 'CHECK FOOD' ? 'check' : 'spoil');
+}
+function animateValue(el, target){
+  var start = parseInt(el.textContent) || 0, t0 = null;
+  function step(ts){
+    if(!t0) t0 = ts;
+    var k = Math.min((ts - t0) / 900, 1);
+    el.textContent = Math.round(start + (target - start) * k);
+    if(k < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+/* ---------- telemetry rendering ---------- */
+function renderTelemetry(d){
+  document.getElementById('gasV').innerHTML  = Math.round(d.gas) + '<span class="unit"> ppm</span>';
+  document.getElementById('tempV').innerHTML = d.temp.toFixed(1) + '<span class="unit"> °C</span>';
+  document.getElementById('humV').innerHTML  = Math.round(d.hum) + '<span class="unit"> %</span>';
+  history.push(d.gas); if(history.length > 40) history.shift();
+  drawChart();
+  var res = FoodAI.analyze(d.temp, d.hum, d.gas);
+  if(!scanning) setGauge(res.score, res.verdict);
+}
+function drawChart(){
+  var c = document.getElementById('chart'), ctx = c.getContext('2d');
+  c.width = c.clientWidth; c.height = c.clientHeight;
+  ctx.clearRect(0,0,c.width,c.height);
+  if(history.length < 2) return;
+  var max = Math.max.apply(null, history) * 1.15 || 1;
+  ctx.beginPath();
+  for(var i=0;i<history.length;i++){
+    var x = i/(history.length-1)*(c.width-10)+5;
+    var y = c.height - 8 - (history[i]/max)*(c.height-20);
+    i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+  }
+  ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.lineTo(c.width-5, c.height-8); ctx.lineTo(5, c.height-8); ctx.closePath();
+  var g = ctx.createLinearGradient(0,0,0,c.height);
+  g.addColorStop(0,'rgba(34,211,238,.35)'); g.addColorStop(1,'rgba(34,211,238,0)');
+  ctx.fillStyle = g; ctx.fill();
+}
+
+/* ---------- event log ---------- */
+function log(msg, cls){
+  var el = document.getElementById('log');
+  var t = new Date().toLocaleTimeString();
+  var div = document.createElement('div');
+  div.innerHTML = '<span class="t">' + t + '</span>' + msg;
+  el.prepend(div);
+  while(el.children.length > 60) el.removeChild(el.lastChild);
+}
+
+/* ---------- connection indicator ---------- */
+function setConn(online){
+  document.getElementById('connDot').className = 'dot' + (online ? ' on' : '');
+  document.getElementById('connTxt').textContent = online ? 'CONNECTED' : (demo ? 'DEMO MODE' : 'OFFLINE');
+}
+
+/* ---------- scan flow ---------- */
+function startScan(){
+  if(scanning) return;
+  scanning = true;
+  var btn = document.getElementById('scanBtn');
+  btn.disabled = true; btn.textContent = 'SCANNING...';
+  document.getElementById('radar').className = 'radar active';
+  document.getElementById('tips').style.display = 'none';
+  log('🔍 Scan started — settling chamber…');
+
+  var remain = 10;
+  document.getElementById('countdown').textContent = remain;
+  var iv = setInterval(function(){
+    remain--;
+    document.getElementById('countdown').textContent = remain;
+    if(remain <= 0){
+      clearInterval(iv);
+      finishScan();
+    }
+  }, 1000);
+
+  if(!demo && ws && ws.readyState === 1){
+    ws.send(JSON.stringify({cmd:'scan'}));
+  }
+}
+
+function finishScan(){
+  var d = {
+    temp: parseFloat(document.getElementById('tempV').textContent) || 25,
+    hum:  parseFloat(document.getElementById('humV').textContent) || 50,
+    gas:  parseFloat(document.getElementById('gasV').textContent) || 400
+  };
+  var res = FoodAI.analyze(d.temp, d.hum, d.gas);
+  setGauge(res.score, res.verdict);
+  log('✅ Scan complete → <b>' + res.verdict + '</b> (' + res.score + '%)');
+  showTips(res);
+
+  var btn = document.getElementById('scanBtn');
+  btn.disabled = false; btn.textContent = '🔍 START FOOD SCAN';
+  document.getElementById('radar').className = 'radar';
+  scanning = false;
+
+  // optional: cloud AI explanation
+  if(AI_SERVER_URL){
+    fetch(AI_SERVER_URL, {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({temp:d.temp, hum:d.hum, gas:d.gas, score:res.score, verdict:res.verdict})})
+      .then(function(r){return r.json();})
+      .then(function(j){ if(j.explanation) showTips({verdict:res.verdict, score:res.score, tips:[j.explanation]}); })
+      .catch(function(){});
+  }
+}
+
+function showTips(res){
+  var el = document.getElementById('tips');
+  var icon = res.verdict === 'FRESH' ? '🟢' : res.verdict === 'CHECK FOOD' ? '🟡' : '🔴';
+  el.innerHTML = '<b>' + icon + ' ' + res.verdict + ' — ' + res.score + '% freshness</b><br>' +
+                 res.tips.join('<br>');
+  el.style.display = 'block';
+}
+
+/* ---------- WebSocket to ESP32 ---------- */
+function connect(){
+  var host = ESP32_URL || location.hostname;
+  if(!host){ startDemo(); return; }
+  try{
+    ws = new WebSocket('ws://' + host + ':81');
+    ws.onopen = function(){ demo = false; setConn(true); log('🟢 Connected to ESP32 at ' + host); };
+    ws.onmessage = function(e){
+      try{
+        var m = JSON.parse(e.data);
+        if(m.type === 'telemetry') renderTelemetry(m);
+        if(m.type === 'scan_result'){
+          setGauge(m.score, m.verdict);
+          var res = FoodAI.analyze(m.temp, m.hum, m.gas);
+          log('📡 ESP32 scan → <b>' + m.verdict + '</b> (' + m.score + '%)');
+          showTips(res);
+        }
+      }catch(err){}
+    };
+    ws.onclose = function(){ setConn(false); log('🔴 ESP32 disconnected — retrying in 5s'); setTimeout(connect, 5000); };
+    ws.onerror = function(){ ws.close(); };
+  }catch(e){ startDemo(); }
+}
+
+/* ---------- demo mode (no hardware) ---------- */
+var demoScenario = 0; // 0 fresh, 1 check, 2 spoilage — cycles every ~30s
+function startDemo(){
+  demo = true; setConn(false);
+  log('ℹ️ No ESP32 found — running <b>DEMO MODE</b> (simulated sensors)');
+  var t = 25, h = 50, g = 400;
+  var tick = 0;
+  setInterval(function(){
+    demoScenario = Math.floor(tick / 30) % 3; tick++;
+    var target = [[25,50,420],[22,62,1100],[27,80,2100]][demoScenario];
+    t += (target[0]-t)*0.08 + (Math.random()-0.5)*0.4;
+    h += (target[1]-h)*0.08 + (Math.random()-0.5)*1.2;
+    g += (target[2]-g)*0.08 + (Math.random()-0.5)*25;
+    renderTelemetry({temp:t, hum:h, gas:Math.max(200,g)});
+  }, 2000);
+  renderTelemetry({temp:25, hum:50, gas:400});
+}
+
+/* ---------- boot ---------- */
+if(location.protocol === 'file:' || !location.hostname){ startDemo(); } else { connect(); }
+window.addEventListener('resize', drawChart);
+</script>
+</body>
+</html>
+
+)rawliteral";

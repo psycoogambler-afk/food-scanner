@@ -18,6 +18,7 @@
 #include <SPIFFS.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include "Webpage.h"
 #include <DHT.h>
 #include <Adafruit_SSD1306.h>
 #include <Wire.h>
@@ -227,10 +228,7 @@ void wsEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
 
 // ---------- HTTP ------------------------------------------------------------
 void handleRoot() {
-  File f = SPIFFS.open("/dashboard.html", "r");
-  if (!f) { server.send(500, "text/plain", "dashboard.html missing - upload web/ to SPIFFS"); return; }
-  server.streamFile(f, "text/html");
-  f.close();
+  server.send(200, "text/html", webpage_html);
 }
 
 void handleStatus() {
