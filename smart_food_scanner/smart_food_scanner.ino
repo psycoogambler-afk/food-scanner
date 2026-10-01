@@ -14,6 +14,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <WebSocketsServer.h>
+#include <ESPmDNS.h>
 #include <SPIFFS.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
@@ -270,6 +271,10 @@ void setup() {
   Serial.print("Connecting to WiFi");
   while (WiFi.status() != WL_CONNECTED) { delay(300); Serial.print("."); }
   Serial.printf("\nIP: %s\n", WiFi.localIP().toString().c_str());
+
+  if (MDNS.begin("foodscanner")) {
+    Serial.println("mDNS responder started. You can now access the dashboard at: http://foodscanner.local");
+  }
 
   server.on("/", handleRoot);
   server.on("/status", handleStatus);
